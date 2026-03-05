@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: sample_training
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  server:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.server
+    restart: unless-stopped
+    ports:
+      - "5050:5050"
+    environment:
+      ATLAS_URI: mongodb://mongodb:27017/sample_training
+      NODE_ENV: production
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  client:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.client
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+
+  etl:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.etl
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        python /app/ETL.py
+        while true; do sleep 3600; python /app/ETL.py; done
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:

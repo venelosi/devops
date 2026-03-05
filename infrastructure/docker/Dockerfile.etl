@@ -1,0 +1,11 @@
+FROM python:3.11-slim
+WORKDIR /app
+
+RUN groupadd -r etluser && useradd -r -g etluser etluser
+
+RUN pip install --no-cache-dir requests
+COPY python-project/ETL.py ./
+RUN chown -R etluser:etluser /app
+USER etluser
+
+CMD ["python", "ETL.py"]

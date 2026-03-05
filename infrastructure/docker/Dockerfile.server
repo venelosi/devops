@@ -1,0 +1,18 @@
+FROM node:18-alpine
+WORKDIR /app
+
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S expressjs -u 1001
+
+COPY mern-project/server/package.json mern-project/server/package-lock.json* ./
+RUN npm install --production
+COPY mern-project/server/ ./
+RUN chown -R expressjs:nodejs /app
+USER expressjs
+
+EXPOSE 5050
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget -qO- http://localhost:5050/healthcheck/ || exit 1
+
+CMD ["node", "server.mjs"]

@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: etl-cronjob
+  namespace: mern-devops
+spec:
+  schedule: "0 */1 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: etl
+        spec:
+          containers:
+            - name: etl
+              image: ${ECR_REPO}/etl:latest
+          restartPolicy: OnFailure
