@@ -101,3 +101,12 @@ jobs:
           chmod +x kubectl && sudo mv kubectl /usr/local/bin/
 
       - run: python deploy.py --tag ${{ github.sha }}
+
+      - name: Print CloudFormation failure events
+        if: failure()
+        run: |
+          aws cloudformation describe-stack-events \
+            --stack-name ${{ env.STACK }} \
+            --region ${{ env.AWS_REGION }} \
+            --query "StackEvents[?contains(ResourceStatus, 'FAILED')].[Timestamp,LogicalResourceId,ResourceType,ResourceStatus,ResourceStatusReason]" \
+            --output table || true

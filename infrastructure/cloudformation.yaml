@@ -168,7 +168,6 @@ Resources:
     Type: AWS::EKS::Cluster
     Properties:
       Name: !Sub ${ProjectName}-cluster
-      Version: '1.28'
       RoleArn: !GetAtt ClusterRole.Arn
       ResourcesVpcConfig:
         SubnetIds:

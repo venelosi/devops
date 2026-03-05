@@ -51,8 +51,21 @@ def deploy():
     registry = f"{account}.dkr.ecr.{REGION}.amazonaws.com"
 
     log("1/6 - CloudFormation stack olusturuluyor (degisiklik yoksa atlar)...")
-    run(f'aws cloudformation deploy --template-file "{CF_TEMPLATE}" --stack-name {STACK} '
-        f'--capabilities CAPABILITY_NAMED_IAM --region {REGION} --no-fail-on-empty-changeset')
+    cf_deploy_cmd = (
+        f'aws cloudformation deploy --template-file "{CF_TEMPLATE}" --stack-name {STACK} '
+        f'--capabilities CAPABILITY_NAMED_IAM --region {REGION} --no-fail-on-empty-changeset'
+    )
+    cf_deploy = run(cf_deploy_cmd, check=False)
+    if cf_deploy.returncode != 0:
+        log("CloudFormation deploy basarisiz. Son stack event'leri yazdiriliyor...")
+        run(
+            f'aws cloudformation describe-stack-events --stack-name {STACK} --region {REGION} '
+            '--query "StackEvents[?contains(ResourceStatus, \'FAILED\')].'
+            '[Timestamp,LogicalResourceId,ResourceType,ResourceStatus,ResourceStatusReason]" '
+            '--output table',
+            check=False,
+        )
+        sys.exit(1)
 
     r = run(f'aws cloudformation describe-stacks --stack-name {STACK} --region {REGION} '
             f'--query "Stacks[0].Outputs"', capture=True)
