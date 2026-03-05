@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+#linux ortam için bu
 import subprocess, sys, json, shutil
 from pathlib import Path
 
@@ -58,6 +58,7 @@ def deploy():
     outputs = {o["OutputKey"]: o["OutputValue"] for o in json.loads(r.stdout)}
     cluster = outputs["ClusterName"]
     ecr = {c: outputs[f"ECR{c.capitalize()}Url"] for c in ["client", "server", "etl"]}
+
 
     log(f"2/6 - Docker image'lari build ediliyor (tag: {tag})...")
     run(f"aws ecr get-login-password --region {REGION} | docker login --username AWS --password-stdin {registry}")
