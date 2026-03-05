@@ -190,13 +190,6 @@ Resources:
         MinSize: !Ref NodeMin
         MaxSize: !Ref NodeMax
 
-  EBSCSIAddon:
-    Type: AWS::EKS::Addon
-    DependsOn: NodeGroup
-    Properties:
-      ClusterName: !Ref Cluster
-      AddonName: aws-ebs-csi-driver
-
   ECRClient:
     Type: AWS::ECR::Repository
     Properties:

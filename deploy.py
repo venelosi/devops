@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #linux ortam için bu
 #debdebbb
-import subprocess, sys, json, shutil
+import subprocess, sys, json, shutil, time
 from pathlib import Path
 
 ROOT = Path(__file__).parent.resolve()
@@ -60,12 +60,73 @@ def get_stack_status():
     sys.exit(1)
 
 
+def print_stack_events():
+    failed_events = run(
+        f'aws cloudformation describe-stack-events --stack-name {STACK} --region {REGION} '
+        '--query "StackEvents[?contains(ResourceStatus, \'FAILED\')].'
+        '[Timestamp,LogicalResourceId,ResourceType,ResourceStatus,ResourceStatusReason]" '
+        '--output table',
+        capture=True,
+        check=False,
+    )
+    if failed_events.stdout:
+        print(failed_events.stdout)
+    if failed_events.stderr:
+        print(failed_events.stderr)
+
+    log("FAILED filtreli event cikmadiysa son 25 event yazdiriliyor...")
+    recent_events = run(
+        f'aws cloudformation describe-stack-events --stack-name {STACK} --region {REGION} '
+        "--max-items 25 --output table",
+        capture=True,
+        check=False,
+    )
+    if recent_events.stdout:
+        print(recent_events.stdout)
+    if recent_events.stderr:
+        print(recent_events.stderr)
+
+
+def delete_stack_until_gone():
+    run(f"aws cloudformation delete-stack --stack-name {STACK} --region {REGION}", check=False)
+    for attempt in range(1, 61):
+        status = get_stack_status()
+        if status is None:
+            log("Eski stack silindi.")
+            return
+
+        if status != "DELETE_IN_PROGRESS":
+            run(f"aws cloudformation delete-stack --stack-name {STACK} --region {REGION}", check=False)
+
+        if attempt % 6 == 0:
+            log(f"Stack silme bekleniyor... durum: {status} (deneme {attempt}/60)")
+        time.sleep(10)
+
+    log("Stack belirtilen surede silinemedi. Eventler yazdiriliyor...")
+    print_stack_events()
+    sys.exit(1)
+
+
 def ensure_stack_can_be_updated():
     status = get_stack_status()
-    if status == "ROLLBACK_COMPLETE":
+    if status and status.endswith("_IN_PROGRESS"):
+        log(f"Stack islemi suruyor ({status}). Tamamlanmasi bekleniyor...")
+        for _ in range(1, 46):
+            time.sleep(20)
+            status = get_stack_status()
+            if status is None or not status.endswith("_IN_PROGRESS"):
+                break
+
+    cleanup_states = {
+        "ROLLBACK_COMPLETE",
+        "ROLLBACK_FAILED",
+        "CREATE_FAILED",
+        "UPDATE_ROLLBACK_FAILED",
+        "UPDATE_ROLLBACK_COMPLETE",
+    }
+    if status in cleanup_states:
         log(f"Stack durumu {status}. Stack silinip yeniden olusturulacak...")
-        run(f"aws cloudformation delete-stack --stack-name {STACK} --region {REGION}")
-        run(f"aws cloudformation wait stack-delete-complete --stack-name {STACK} --region {REGION}")
+        delete_stack_until_gone()
         return
 
     if status:
@@ -92,31 +153,7 @@ def deploy():
     cf_deploy = run(cf_deploy_cmd, check=False)
     if cf_deploy.returncode != 0:
         log("CloudFormation deploy basarisiz. Son stack event'leri yazdiriliyor...")
-        failed_events = run(
-            f'aws cloudformation describe-stack-events --stack-name {STACK} --region {REGION} '
-            '--query "StackEvents[?contains(ResourceStatus, \'FAILED\')].'
-            '[Timestamp,LogicalResourceId,ResourceType,ResourceStatus,ResourceStatusReason]" '
-            '--output table',
-            capture=True,
-            check=False,
-        )
-        if failed_events.stdout:
-            print(failed_events.stdout)
-        if failed_events.stderr:
-            print(failed_events.stderr)
-
-        log("FAILED filtreli event cikmadiysa son 25 event yazdiriliyor...")
-        recent_events = run(
-            f'aws cloudformation describe-stack-events --stack-name {STACK} --region {REGION} '
-            "--max-items 25 --output table",
-            capture=True,
-            check=False,
-        )
-        if recent_events.stdout:
-            print(recent_events.stdout)
-        if recent_events.stderr:
-            print(recent_events.stderr)
-
+        print_stack_events()
         sys.exit(1)
 
     r = run(f'aws cloudformation describe-stacks --stack-name {STACK} --region {REGION} '
@@ -192,7 +229,7 @@ def destroy():
     run(f"aws cloudwatch delete-alarms --alarm-names {STACK}-cluster-cpu-high --region {REGION}", check=False)
     run("kubectl delete namespace mern-devops --ignore-not-found", check=False)
     log("NLB'nin silinmesi bekleniyor (90sn)...")
-    import time; time.sleep(90)
+    time.sleep(90)
     for repo in [f"{STACK}/client", f"{STACK}/server", f"{STACK}/etl"]:
         run(f"aws ecr delete-repository --repository-name {repo} --region {REGION} --force", check=False)
     run(f"aws cloudformation delete-stack --stack-name {STACK} --region {REGION}")
