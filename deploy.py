@@ -189,7 +189,15 @@ def deploy():
     for f in sorted(tmp.glob("*.yaml")):
         run(f"kubectl apply -f {f}")
 
-    run("kubectl rollout status deployment/mongodb -n mern-devops --timeout=120s")
+    mongo_rollout = run("kubectl rollout status deployment/mongodb -n mern-devops --timeout=300s", check=False)
+    if mongo_rollout.returncode != 0:
+        log("MongoDB rollout basarisiz. Teshis bilgileri yazdiriliyor...")
+        run("kubectl get pods -n mern-devops -o wide", check=False)
+        run("kubectl get pvc -n mern-devops", check=False)
+        run("kubectl describe deployment mongodb -n mern-devops", check=False)
+        run("kubectl describe pods -n mern-devops -l app=mongodb", check=False)
+        run("kubectl logs -n mern-devops deployment/mongodb --tail=200", check=False)
+        sys.exit(1)
     run("kubectl rollout status deployment/server -n mern-devops --timeout=120s")
     run("kubectl rollout status deployment/client -n mern-devops --timeout=120s")
     shutil.rmtree(tmp, ignore_errors=True)
