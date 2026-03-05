@@ -92,13 +92,31 @@ def deploy():
     cf_deploy = run(cf_deploy_cmd, check=False)
     if cf_deploy.returncode != 0:
         log("CloudFormation deploy basarisiz. Son stack event'leri yazdiriliyor...")
-        run(
+        failed_events = run(
             f'aws cloudformation describe-stack-events --stack-name {STACK} --region {REGION} '
             '--query "StackEvents[?contains(ResourceStatus, \'FAILED\')].'
             '[Timestamp,LogicalResourceId,ResourceType,ResourceStatus,ResourceStatusReason]" '
             '--output table',
+            capture=True,
             check=False,
         )
+        if failed_events.stdout:
+            print(failed_events.stdout)
+        if failed_events.stderr:
+            print(failed_events.stderr)
+
+        log("FAILED filtreli event cikmadiysa son 25 event yazdiriliyor...")
+        recent_events = run(
+            f'aws cloudformation describe-stack-events --stack-name {STACK} --region {REGION} '
+            "--max-items 25 --output table",
+            capture=True,
+            check=False,
+        )
+        if recent_events.stdout:
+            print(recent_events.stdout)
+        if recent_events.stderr:
+            print(recent_events.stderr)
+
         sys.exit(1)
 
     r = run(f'aws cloudformation describe-stacks --stack-name {STACK} --region {REGION} '
