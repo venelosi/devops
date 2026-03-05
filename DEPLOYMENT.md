@@ -51,8 +51,7 @@ python deploy.py
 python deploy.py --tag v1.0.0
 ```
 
-## Silme
-
+## Silme(geliştiriliyor)
 ```bash
 python deploy.py --destroy
 ```
