@@ -133,6 +133,17 @@ def ensure_stack_can_be_updated():
         log(f"Mevcut stack durumu: {status}")
 
 
+def get_frontend_url(max_attempts=30, sleep_seconds=10):
+    cmd = 'kubectl get svc client -n mern-devops -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"'
+    for _ in range(max_attempts):
+        r = run(cmd, capture=True, check=False)
+        hostname = (r.stdout or "").strip()
+        if hostname and hostname != "<no value>":
+            return f"http://{hostname}"
+        time.sleep(sleep_seconds)
+    return None
+
+
 def deploy():
     for tool in ["docker", "aws", "kubectl"]:
         if not shutil.which(tool):
@@ -207,9 +218,14 @@ def deploy():
 
     log("6/6 - Kontrol ediliyor...")
     run("kubectl get pods -n mern-devops")
-    run("kubectl get svc client -n mern-devops")
+    run("kubectl get svc client -n mern-devops -o wide")
     log("Deploy tamamlandi!")
-    log("Frontend URL icin: kubectl get svc client -n mern-devops")
+    frontend_url = get_frontend_url()
+    if frontend_url:
+        log(f"Frontend URL: {frontend_url}")
+        print(f"FRONTEND_URL={frontend_url}")
+    else:
+        log("Frontend URL henuz hazir degil. Son durum: kubectl get svc client -n mern-devops")
 
 
 def setup_autoscaling(cluster):
