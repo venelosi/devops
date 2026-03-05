@@ -1,5 +1,4 @@
 ## Acceptance Criteria:
-## debdeddeded
 1. MongoDB should connected
 2. All endpoints should work
 3. All pages should work

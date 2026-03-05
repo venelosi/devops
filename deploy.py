@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 #linux ortam için bu
+#debdeb
 import subprocess, sys, json, shutil
 from pathlib import Path
 
