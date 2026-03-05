@@ -40,6 +40,38 @@ def get_account():
     return json.loads(r.stdout)["Account"]
 
 
+def get_stack_status():
+    r = run(
+        f'aws cloudformation describe-stacks --stack-name {STACK} --region {REGION} '
+        '--query "Stacks[0].StackStatus" --output text',
+        capture=True,
+        check=False,
+    )
+    if r.returncode == 0:
+        return r.stdout.strip()
+
+    err = (r.stderr or "").lower()
+    if "does not exist" in err:
+        return None
+
+    log("CloudFormation stack durumu okunamadi.")
+    if r.stderr:
+        print(r.stderr)
+    sys.exit(1)
+
+
+def ensure_stack_can_be_updated():
+    status = get_stack_status()
+    if status == "ROLLBACK_COMPLETE":
+        log(f"Stack durumu {status}. Stack silinip yeniden olusturulacak...")
+        run(f"aws cloudformation delete-stack --stack-name {STACK} --region {REGION}")
+        run(f"aws cloudformation wait stack-delete-complete --stack-name {STACK} --region {REGION}")
+        return
+
+    if status:
+        log(f"Mevcut stack durumu: {status}")
+
+
 def deploy():
     for tool in ["docker", "aws", "kubectl"]:
         if not shutil.which(tool):
@@ -49,6 +81,8 @@ def deploy():
     tag = get_arg("tag", "latest")
     account = get_account()
     registry = f"{account}.dkr.ecr.{REGION}.amazonaws.com"
+
+    ensure_stack_can_be_updated()
 
     log("1/6 - CloudFormation stack olusturuluyor (degisiklik yoksa atlar)...")
     cf_deploy_cmd = (
