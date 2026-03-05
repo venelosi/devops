@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - '**.md'
+      - '**/*.md'
 
 env:
   AWS_REGION: eu-west-1
@@ -15,9 +15,72 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose up -d
-      - run: sleep 30 && curl -f http://localhost:5050/healthcheck/
-      - run: cd mern-project/client && npm ci && npx cypress run --config baseUrl=http://localhost:3000
+      - name: Start services
+        run: docker compose up -d
+
+      - name: Wait for backend healthcheck
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:5050/healthcheck/ > /dev/null; then
+              echo "Backend is healthy"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Backend healthcheck did not become ready in time"
+              docker compose logs server
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Wait for frontend
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:3000/ > /dev/null; then
+              echo "Frontend is reachable"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Frontend did not become ready in time"
+              docker compose logs client
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Smoke test CRUD and proxy
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST http://localhost:5050/record \
+            -H "Content-Type: application/json" \
+            -d '{"name":"CI Employee","position":"QA","level":"Intern"}' > /tmp/create.json
+
+          for i in {1..15}; do
+            if curl -fsS http://localhost:5050/record/ | tee /tmp/backend-records.json | grep -q 'CI Employee'; then
+              echo "Backend record check passed"
+              break
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "Record not visible on backend in time"
+              docker compose logs server mongodb
+              exit 1
+            fi
+            sleep 2
+          done
+
+          for i in {1..15}; do
+            if curl -fsS http://localhost:3000/record/ | tee /tmp/frontend-proxy-records.json | grep -q 'CI Employee'; then
+              echo "Frontend proxy record check passed"
+              break
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "Record not visible via frontend proxy in time"
+              docker compose logs client server
+              exit 1
+            fi
+            sleep 2
+          done
+
       - if: always()
         run: docker compose down -v
 
